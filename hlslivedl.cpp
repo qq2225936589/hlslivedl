@@ -124,6 +124,48 @@ string getbaseurl(string url)
     }
 }
 
+string getindex(string text)
+{
+    string ret = "";
+	string pattern = "([0-9]{1,15})";
+	regex express(pattern);
+	regex_iterator<string::const_iterator> begin(text.cbegin(), text.cend(), express);
+	for (auto iter = begin; iter != sregex_iterator(); iter++)
+	{
+        ret = iter->str();
+    }
+    if (ret == "" || ret.size() <= 0 ) return text;
+    return ret+".ts";
+}
+
+static double duration = 0.0;
+static char strduration[100];
+static unsigned int dlidx = 1;
+double getlen(string text)
+{
+    double rd = 0.0;
+    string ret = "";
+	string pattern = "([0-9.]{1,8})";
+	regex express(pattern);
+	regex_iterator<string::const_iterator> begin(text.cbegin(), text.cend(), express);
+	for (auto iter = begin; iter != sregex_iterator(); iter++)
+	{
+        ret = iter->str();
+    }
+    if (ret == "" || ret.size() <= 0 ) return 0.0;
+    rd = atof(ret.c_str());
+    duration = duration + rd;
+    
+    int dhh=(unsigned int)(duration/3600);
+    int dmm=(unsigned int)(duration)%3600/60;
+    int dss=(unsigned int)(duration)%3600%60;
+    int dms=(unsigned int)(duration*1000)%1000;
+    sprintf(strduration,"%4d %5.03f %02d:%02d:%02d.%03d",
+        dlidx, rd, dhh, dmm, dss, dms);
+    dlidx++;
+    return rd;
+}
+
 void string_replace( string &strBig, const string &strsrc, const string &strdst)
 {
     string::size_type pos = 0;
@@ -173,11 +215,12 @@ void gettsurl(string str)
         }
         else 
         {
-            string newfn = iter->str();
+            string newfn = getindex(iter->str());
             string_replace(newfn, "/", "-");
         	if (access(newfn.c_str(), 0)) {
-        		cout << extinfo << endl;
-        		cout << newfn << endl;
+                getlen(extinfo);
+        		cout << " " << strduration << " " << newfn << endl;
+        		//cout << newfn << endl;
         		putmsg(extinfo.c_str());
         		putmsg(newfn.c_str());
         		FILE * tsh = fopen(newfn.c_str(), "wb");
@@ -204,7 +247,7 @@ void help()
     cout << "    -u set useragent" << endl;
     cout << "    -d debug mode" << endl;
     cout << "    Press [Q] to stop download" << endl;
-    cout << "    Version 1.0 by NLSoft 2019.08" << endl;
+    cout << "    Version 1.0.1 by NLSoft 2019.08" << endl;
 }
 
 int main(int argc, char** argv) {
@@ -212,6 +255,7 @@ int main(int argc, char** argv) {
     static char urlm3u8[1024];
     memset(urlm3u8,0,1024);
     memset(g_proxy,0,100);
+    memset(strduration,0,100);
 
     if(argc == 1)
     {
@@ -227,23 +271,23 @@ int main(int argc, char** argv) {
         switch (option_index) {
         case 'o':
             strcpy(m3u8, optarg);
-            printf("output filename is %s\n", m3u8);
+            //printf("output filename is %s\n", m3u8);
             break;
         case 'u':
             strcpy(g_useragent, optarg);
-            printf("useragent is %s\n", g_useragent);
+            //printf("useragent is %s\n", g_useragent);
             break;
         case 'p':
             strcpy(g_proxy, optarg);
-            printf("proxy is %s\n", g_proxy);
+            //printf("proxy is %s\n", g_proxy);
             break;
         case 'i':
             strcpy(urlm3u8, optarg);
-            printf("m3u8 url is %s\n", urlm3u8);
-            break;        
+            //printf("m3u8 url is %s\n", urlm3u8);
+            break;
         case 'd':
             isDEBUG = 1;
-            printf("select debug mode\n");
+            //printf("select debug mode\n");
             break;
         }
     }
