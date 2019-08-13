@@ -15,6 +15,8 @@ using namespace std;
 static char m3u8[1024];
 static char g_useragent[1024];
 static char g_proxy[100];
+static size_t totalsize = 0;
+static char strtotalsize[100];
 
 static string baseurl;
 static int isDEBUG = 0;
@@ -82,9 +84,10 @@ static void * downts(void *arg)
         {
     		if(isDEBUG) fprintf(stderr, "thread curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
             if(isDEBUG) cout << "pthread remove " << fn << endl;
-            remove(fn.c_str());
+            cout << "*** skip [" << fn << "] ***" <<endl;
+            //remove(fn.c_str());
     	}
-        else 
+        else
         {
     		if(isDEBUG) cout << "thread response_code " << response_code << endl;
     		if(isDEBUG) cout << "thread response_string size " << response_string.size() << endl;
@@ -101,6 +104,11 @@ static void * downts(void *arg)
                     fwrite(response_string.c_str(), 1, response_string.size(), tsh);
                     fclose(tsh);
                 }
+                totalsize += response_string.size();
+                if(totalsize<1024) sprintf(strtotalsize,"%10ld   ", totalsize);
+                else if(totalsize<1024*1024) sprintf(strtotalsize,"%10.02f KB", (double)totalsize/1024);
+                else if(totalsize<1024*1024*1024) sprintf(strtotalsize,"%10.02f MB", (double)totalsize/1024/1024);
+                else sprintf(strtotalsize,"%10.02f GB", (double)totalsize/1024/1024/1024);
             }
     	}
     }
@@ -135,7 +143,7 @@ string getindex(string text)
         ret = iter->str();
     }
     if (ret == "" || ret.size() <= 0 ) return text;
-    return ret+".ts";
+    return ret;
 }
 
 static double duration = 0.0;
@@ -181,6 +189,8 @@ void string_replace( string &strBig, const string &strsrc, const string &strdst)
 
 static unsigned int dlcount = 0;
 static unsigned int firstdl = 0;
+static unsigned int dladdcount = 0;
+static unsigned int checknodowncount = 0;
 
 void gettsurl(string str)
 {
@@ -217,9 +227,18 @@ void gettsurl(string str)
         {
             string newfn = getindex(iter->str());
             string_replace(newfn, "/", "-");
+            
+            if(newfn.size()<=4)
+            {
+                char tmp[50];
+                sprintf(tmp, "%05d", atoi(newfn.c_str()));
+                newfn = tmp;
+            }
+            newfn = newfn + ".ts";
+            
         	if (access(newfn.c_str(), 0)) {
                 getlen(extinfo);
-        		cout << " " << strduration << " " << newfn << endl;
+        		cout << " " << strduration << " " << strtotalsize << " " << newfn << endl;
         		//cout << newfn << endl;
         		putmsg(extinfo.c_str());
         		putmsg(newfn.c_str());
@@ -233,6 +252,7 @@ void gettsurl(string str)
         		strcpy(ta.url, fullurl.c_str());
         		strcpy(ta.fn, newfn.c_str());
         		pthread_create( & thread, NULL, downts,  & ta);
+                dladdcount ++;
         	}
         }
     }
@@ -247,7 +267,7 @@ void help()
     cout << "    -u set useragent" << endl;
     cout << "    -d debug mode" << endl;
     cout << "    Press [Q] to stop download" << endl;
-    cout << "    Version 1.0.1 by NLSoft 2019.08" << endl;
+    cout << "    Version 1.0.2 by NLSoft 2019.08" << endl;
 }
 
 int main(int argc, char** argv) {
@@ -256,6 +276,8 @@ int main(int argc, char** argv) {
     memset(urlm3u8,0,1024);
     memset(g_proxy,0,100);
     memset(strduration,0,100);
+    memset(strtotalsize,0,100);
+    strcpy(strtotalsize, "             ");
 
     if(argc == 1)
     {
@@ -309,6 +331,7 @@ int main(int argc, char** argv) {
     auto curl = curl_easy_init();
     if (curl) {
     	while (1) {
+            dladdcount = 0;
     		//curl_easy_setopt(curl, CURLOPT_URL, "https://api.github.com/repos/whoshuu/cpr/contributors?anon=true&key=value");
     		curl_easy_setopt(curl, CURLOPT_URL, urlm3u8);
     		curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
@@ -374,6 +397,18 @@ int main(int argc, char** argv) {
                     putmsg("#EXT-X-ENDLIST");
                     break;
                 }
+            }
+            
+            if(dladdcount>0) checknodowncount = 0;
+            else checknodowncount ++;
+            //printf("dladdcount %d checknodowncount %ld\n", dladdcount, checknodowncount);
+            
+            // No files were downloaded in 16 seconds
+            if(checknodowncount>=16)
+            {
+                if(isDEBUG) cout << "#EXT-X-ENDLIST\r\n" << endl;
+                putmsg("#EXT-X-ENDLIST");
+                break;
             }
     		usleep(1000 * 1000);
     		//sleep(1);
