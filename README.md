@@ -13,4 +13,5 @@ Usage: hlslivedl [options] -i [http://...m3u8]
     
     Press [Q] to stop download
     
-    Version 1.0 by NLSoft 2019.08
+    Version 1.0.2 by NLSoft 2019.08
+    
