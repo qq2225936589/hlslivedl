@@ -15,3 +15,4 @@ Usage: hlslivedl [options] -i [http://...m3u8]
     
     Version 1.0.2 by NLSoft 2019.08
     
+Donation Alipay HY007
