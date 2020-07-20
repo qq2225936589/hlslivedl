@@ -9,6 +9,7 @@
 #include <io.h>
 #include <fstream>
 #include <getopt.h>
+#include <list>
 
 using namespace std;
 
@@ -24,7 +25,9 @@ static char strtotalsize[100];
 static string baseurl;
 static int isDEBUG = 0;
 
-void putmsg(const char * msg) 
+static list<pthread_t>listpthreads;
+
+void putmsg(const char * msg)
 {
     if (!msg) return;
 	FILE * m3u8h = fopen(m3u8, "ab+");
@@ -47,6 +50,28 @@ size_t writeFunction(void *ptr, size_t size, size_t nmemb, string* data) {
 size_t writeFunction2(void *ptr, size_t size, size_t nmemb, string* data) {
     data->append((char*) ptr, size * nmemb);
     return size * nmemb;
+}
+static deleteNode(pthread_t tid)
+{
+    list<pthread_t>::iterator it;
+    for (it = listpthreads.begin(); it != listpthreads.end(); it++)
+    {
+        if (tid == *it)
+        {
+            listpthreads.erase(it);
+        }
+    }
+}
+
+static void waitThreads()
+{
+    list<pthread_t>::iterator it;
+    cout << "Waiting for the end of download threads" << endl;
+    for (it = listpthreads.begin(); it != listpthreads.end(); it++)
+    {
+        //cout << "      thread ID " << *it << endl;
+        pthread_join(*it, NULL);
+    }
 }
 
 static void * downts(void *arg)
@@ -113,11 +138,17 @@ static void * downts(void *arg)
                 else if(totalsize<1024*1024*1024) sprintf(strtotalsize,"%10.03f MB", (double)totalsize/1024/1024);
                 else                              sprintf(strtotalsize,"%10.03f GB", (double)totalsize/1024/1024/1024);
             }
+            else
+            {
+                cout << "*** response error [" << fn << "] ***" <<endl;
+                remove(fn.c_str());
+            }
     	}
     }
     curl_easy_cleanup(curl);
     curl = NULL;
     if(isDEBUG) cout << "pthread exit" << endl;
+    deleteNode(pthread_self());
     pthread_exit(NULL);
     return NULL;    
 }
@@ -257,7 +288,8 @@ void gettsurl(string str)
         		memset( & ta, 0x00, sizeof(ta));
         		strcpy(ta.url, fullurl.c_str());
         		strcpy(ta.fn, newfn.c_str());
-        		pthread_create( & thread, NULL, downts,  & ta);
+                pthread_create( & thread, NULL, downts,  & ta);
+                listpthreads.push_back(thread);
                 dladdcount ++;
         	}
         }
@@ -274,7 +306,7 @@ void help()
     cout << "    -t set duration seconds" << endl;
     cout << "    -d debug mode" << endl;
     cout << "    Press [Q] to stop download" << endl;
-    cout << "    Version 1.0.6 by NLSoft 2020.07" << endl;
+    cout << "    Version 1.0.7 by NLSoft 2020.07" << endl;
 }
 
 int main(int argc, char** argv) {
@@ -393,7 +425,7 @@ int main(int argc, char** argv) {
                 }
                 else
                 {
-                    usleep(3 * 1000 * 1000);
+                    waitThreads();
                     if(isDEBUG) cout << "#EXT-X-ENDLIST\r\n" << endl;
                     putmsg("#EXT-X-ENDLIST");
                     if(isDEBUG) cout << "main response_code " << response_code << "\n" << endl;
@@ -406,7 +438,7 @@ int main(int argc, char** argv) {
                 exitflag = _getch();
                 if (exitflag == 'q' || exitflag == 'Q')
                 {
-                    usleep(3 * 1000 * 1000);
+                    waitThreads();
                     if(isDEBUG) cout << "#EXT-X-ENDLIST\r\n" << endl;
                     putmsg("#EXT-X-ENDLIST");
                     break;
@@ -420,6 +452,7 @@ int main(int argc, char** argv) {
             // No files were downloaded in 60 seconds
             if(checknodowncount>=60 || isMAX)
             {
+                waitThreads();
                 if(isDEBUG) cout << "#EXT-X-ENDLIST\r\n" << endl;
                 putmsg("#EXT-X-ENDLIST");
                 break;
