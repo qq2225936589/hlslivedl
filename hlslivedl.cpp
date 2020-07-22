@@ -41,6 +41,7 @@ void putmsg(const char * msg)
 typedef struct targ {
     char url[1024];
     char fn[1024];
+    char idxmsg[512];
 } targ;
 
 size_t writeFunction(void *ptr, size_t size, size_t nmemb, string* data) {
@@ -51,7 +52,7 @@ size_t writeFunction2(void *ptr, size_t size, size_t nmemb, string* data) {
     data->append((char*) ptr, size * nmemb);
     return size * nmemb;
 }
-static deleteNode(pthread_t tid)
+static void deleteNode(pthread_t tid)
 {
     list<pthread_t>::iterator it;
     for (it = listpthreads.begin(); it != listpthreads.end(); it++)
@@ -66,7 +67,16 @@ static deleteNode(pthread_t tid)
 static void waitThreads()
 {
     list<pthread_t>::iterator it;
-    cout << "Waiting for the end of download threads" << endl;
+    string str = " ";
+    if(listpthreads.size()<=0) return;
+    for (it = listpthreads.begin(); it != listpthreads.end(); it++)
+    {
+        str += std::to_string(*it);
+        if(it!=listpthreads.end())
+            str += " ";
+    }
+
+    cout << "Waiting for the end of download threads. [" << listpthreads.size() << " =" << str << "]" << endl;
     for (it = listpthreads.begin(); it != listpthreads.end(); it++)
     {
         //cout << "      thread ID " << *it << endl;
@@ -79,7 +89,11 @@ static void * downts(void *arg)
     targ *ta= (targ *)arg;
     string fullurl = ta->url;;
     string fn = ta->fn;
-    
+    string idxmsg = ta->idxmsg;
+    string statusmsg = " [OK]";
+    char recvsize[20];
+    //sprintf(recvsize,"          ");
+    sprintf(recvsize,"----------");
     //cout << fn << endl;
     auto curl = curl_easy_init();
     if (curl) {
@@ -112,7 +126,8 @@ static void * downts(void *arg)
         {
     		if(isDEBUG) fprintf(stderr, "thread curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
             if(isDEBUG) cout << "pthread remove " << fn << endl;
-            cout << "*** failed [" << fn << "] ***" <<endl;
+            //cout << "*** failed [" << fn << "] ***" <<endl;
+            statusmsg = " [Failed]";
             remove(fn.c_str());
     	}
         else
@@ -123,28 +138,37 @@ static void * downts(void *arg)
     		//cout << "effective url " << url << endl;
     		//cout << "response_string \n" << response_string << endl;
     		//cout << "header_string \n" << header_string << endl;
-            if( response_string.size() > 0 )
+            unsigned long long int rsize = response_string.size();
+            if( rsize > 0 )
             {
                 //cout << fn << endl;
                 FILE *tsh = fopen(fn.c_str(), "wb");
                 if(tsh)
                 {
-                    fwrite(response_string.c_str(), 1, response_string.size(), tsh);
+                    fwrite(response_string.c_str(), 1, rsize, tsh);
                     fclose(tsh);
                 }
-                totalsize += response_string.size();
-                if(totalsize<1024)                sprintf(strtotalsize,"%10ld    ", totalsize);
+                totalsize += rsize;
+                if(totalsize<1024)                sprintf(strtotalsize,"%10ld   ", totalsize);
                 else if(totalsize<1024*1024)      sprintf(strtotalsize,"%10.03f KB", (double)totalsize/1024);
                 else if(totalsize<1024*1024*1024) sprintf(strtotalsize,"%10.03f MB", (double)totalsize/1024/1024);
                 else                              sprintf(strtotalsize,"%10.03f GB", (double)totalsize/1024/1024/1024);
+                
+                if(rsize<1024)                    sprintf(recvsize,"%7ld   ", rsize);
+                else if(rsize<1024*1024)          sprintf(recvsize,"%7.02f KB", (double)rsize/1024);
+                else if(rsize<1024*1024*1024)     sprintf(recvsize,"%7.02f MB", (double)rsize/1024/1024);
+                else                              sprintf(recvsize,"%7.02f MB", (double)rsize/1024/1024/1024);
+
             }
             else
             {
-                cout << "*** response error [" << fn << "] ***" <<endl;
+                //cout << "*** response error [" << fn << "] ***" <<endl;
+                statusmsg = " [Response error]";
                 remove(fn.c_str());
             }
     	}
     }
+    cout << " " << idxmsg << " " << recvsize << strtotalsize << " " << fn << statusmsg << endl;
     curl_easy_cleanup(curl);
     curl = NULL;
     if(isDEBUG) cout << "pthread exit" << endl;
@@ -181,7 +205,7 @@ string getindex(string text)
 }
 
 static double duration = 0.0;
-static char strduration[100];
+static char strduration[512];
 static unsigned int dlidx = 1;
 static int isMAX = 0;
 double getlen(string text)
@@ -275,7 +299,7 @@ void gettsurl(string str)
             
         	if (access(newfn.c_str(), 0)) {
                 getlen(extinfo);
-        		cout << " " << strduration << " " << strtotalsize << " " << newfn << endl;
+        		//cout << " " << strduration << " " << strtotalsize << " " << newfn << endl;
         		//cout << newfn << endl;
         		putmsg(extinfo.c_str());
         		putmsg(newfn.c_str());
@@ -288,6 +312,7 @@ void gettsurl(string str)
         		memset( & ta, 0x00, sizeof(ta));
         		strcpy(ta.url, fullurl.c_str());
         		strcpy(ta.fn, newfn.c_str());
+        		strcpy(ta.idxmsg, strduration);
                 pthread_create( & thread, NULL, downts,  & ta);
                 listpthreads.push_back(thread);
                 dladdcount ++;
@@ -306,7 +331,7 @@ void help()
     cout << "    -t set duration seconds" << endl;
     cout << "    -d debug mode" << endl;
     cout << "    Press [Q] to stop download" << endl;
-    cout << "    Version 1.0.7 by NLSoft 2020.07" << endl;
+    cout << "    Version 1.0.8 by NLSoft 2020.07" << endl;
 }
 
 int main(int argc, char** argv) {
@@ -349,7 +374,7 @@ int main(int argc, char** argv) {
         case 't':
             strcpy(g_maxlen, optarg);
             g_maxduration = atof(g_maxlen);
-            if(isDEBUG) printf("g_maxlen url is %s\n", g_maxlen);
+            if(isDEBUG) printf("g_maxlen is %s\n", g_maxlen);
             break;
         case 'd':
             isDEBUG = 1;
