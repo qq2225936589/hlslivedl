@@ -10,7 +10,7 @@
 #include <fstream>
 #include <getopt.h>
 #include <list>
-
+#include <pthread.h>
 using namespace std;
 
 static char m3u8[1024];
@@ -26,6 +26,7 @@ static string baseurl;
 static int isDEBUG = 0;
 
 static list<pthread_t>listpthreads;
+pthread_mutex_t lock;
 
 void putmsg(const char * msg)
 {
@@ -59,7 +60,9 @@ static void deleteNode(pthread_t tid)
     {
         if (tid == *it)
         {
+            pthread_mutex_lock(&lock);
             listpthreads.erase(it);
+            pthread_mutex_unlock(&lock);
         }
     }
 }
@@ -314,7 +317,9 @@ void gettsurl(string str)
         		strcpy(ta.fn, newfn.c_str());
         		strcpy(ta.idxmsg, strduration);
                 pthread_create( & thread, NULL, downts,  & ta);
+                pthread_mutex_lock(&lock);
                 listpthreads.push_back(thread);
+                pthread_mutex_unlock(&lock);
                 dladdcount ++;
         	}
         }
@@ -331,7 +336,7 @@ void help()
     cout << "    -t set duration seconds" << endl;
     cout << "    -d debug mode" << endl;
     cout << "    Press [Q] to stop download" << endl;
-    cout << "    Version 1.0.8 by NLSoft 2020.07" << endl;
+    cout << "    Version 1.0.9 by NLSoft 2020.07" << endl;
 }
 
 int main(int argc, char** argv) {
@@ -393,7 +398,11 @@ int main(int argc, char** argv) {
 	if (m3u8h) {
 		fclose(m3u8h);
 	}
-
+    if (pthread_mutex_init(&lock, NULL) != 0)
+    {
+        printf("mutex init failed\n");
+        return 1;
+    }
     curl_global_init(CURL_GLOBAL_DEFAULT);    
     baseurl = getbaseurl(urlm3u8);
     if(isDEBUG) cout << baseurl << endl;
@@ -489,6 +498,7 @@ int main(int argc, char** argv) {
     curl_easy_cleanup(curl);
     curl = NULL;
     curl_global_cleanup();
+    pthread_mutex_destroy(&lock);
     if(isDEBUG) cout << "main exit" << endl;
     return 0;
 }
