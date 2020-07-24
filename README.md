@@ -13,6 +13,6 @@ Usage: hlslivedl [options] -i [http://...m3u8]
     
     Press [Q] to stop download
     
-    Version 1.0.8 by NLSoft 2020.07
+    Version 1.0.9 by NLSoft 2020.07
     
 Donation Alipay HY007
